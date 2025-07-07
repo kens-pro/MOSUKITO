@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高周波音当てチャレンジ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=M+PLUS+1p:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-bg: #1a233b;
+            --secondary-bg: #2a3858;
+            --accent-color: #00dffc;
+            --text-color: #e0e6f2;
+            --correct-color: #4dff8a;
+            --incorrect-color: #ff4d4d;
+        }
+        * { box-sizing: border-box; user-select: none; }
+        html { scroll-behavior: smooth; }
+        body {
+            margin: 0;
+            font-family: 'M PLUS 1p', sans-serif;
+            background-color: var(--primary-bg);
+            color: var(--text-color);
+            padding: 2rem 1rem;
+        }
+        .main-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+            color: var(--accent-color);
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+        }
+
+        .question-card {
+            background-color: var(--secondary-bg);
+            border-radius: 20px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            border: 3px solid var(--accent-color);
+            transition: all 0.5s ease, border-color 1s ease;
+            opacity: 0;
+            transform: translateY(20px);
+            position: relative;
+            overflow: hidden;
+        }
+        .question-card.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .question-card.answered {
+            opacity: 0.6;
+        }
+
+        .level-display {
+            position: absolute;
+            top: 1rem;
+            left: 1.5rem;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            font-size: 1.2rem;
+            opacity: 0.5;
+        }
+
+        @keyframes correct-glow {
+            0% { box-shadow: 0 0 10px var(--card-glow-color); }
+            50% { box-shadow: 0 0 40px var(--card-glow-color), 0 0 10px var(--card-glow-color) inset; transform: scale(1.02); }
+            100% { box-shadow: 0 0 10px var(--card-glow-color); }
+        }
+        .correct-animation {
+            animation: correct-glow 0.8s ease-out;
+        }
+
+        .frequency-display {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.5rem;
+            color: var(--accent-color);
+            text-shadow: 0 0 10px var(--accent-color);
+            text-align: center;
+            margin-top: 1.5rem;
+        }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .play-sound-button {
+            font-family: 'M PLUS 1p', sans-serif;
+            font-weight: 700;
+            font-size: 1.2rem;
+            background-color: var(--accent-color);
+            color: var(--primary-bg);
+            border: none;
+            border-radius: 10px;
+            padding: 0.8rem 1.5rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .play-sound-button:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px var(--accent-color);
+        }
+        .play-sound-button:disabled {
+            background-color: #555;
+            color: #888;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .answer-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; width: 100%; }
+        .answer-button {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            background-color: transparent;
+            color: var(--accent-color);
+            border: 2px solid var(--accent-color);
+            border-radius: 10px;
+            padding: 1rem 0;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .answer-button:hover:not(:disabled) { background-color: var(--accent-color); color: var(--primary-bg); }
+        .answer-button:disabled { color: #555; border-color: #555; cursor: not-allowed; }
+        .answer-button.unknown {
+            grid-column: 1 / -1;
+            color: #aaa;
+            border-color: #aaa;
+        }
+        .answer-button.unknown:hover:not(:disabled) { background-color: #aaa; color: var(--primary-bg); }
+        
+        .feedback { text-align: center; margin-top: 1rem; font-size: 1.2rem; font-weight: 700; min-height: 3.5rem; display: flex; flex-direction: column; justify-content: center; align-items: center; padding-bottom: 0.5rem; }
+        .feedback-main { font-size: 1.5rem; }
+        .feedback-sub { font-size: 1rem; opacity: 0.8; margin-top: 0.2rem; }
+        .feedback.correct { color: var(--correct-color); }
+        .feedback.incorrect { color: var(--incorrect-color); }
+        
+        .hidden { display: none; }
+        .result-screen, .ending-screen { text-align: center; }
+        
+        @media (max-width: 480px) {
+            .answer-buttons { grid-template-columns: repeat(2, 1fr); }
+            .answer-button.unknown { grid-column: auto; }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <header class="header">
+            <h1>モスキートゲームで耳年齢チェック！</h1>
+        </header>
+
+        <main id="game-area"></main>
+
+        <div id="result-screen" class="result-screen hidden"></div>
+
+        <div id="ending-screen" class="ending-screen hidden"></div>
+    </div>
+
+    <script>
+        const gameArea = document.getElementById('game-area');
+        const resultScreen = document.getElementById('result-screen');
+        const endingScreen = document.getElementById('ending-screen');
+        
+        const START_FREQUENCY = 8000;
+        const MAX_FREQUENCY = 22000;
+        const FREQUENCY_STEP = 1000;
+        const MAX_BEEPS = 5;
+
+        // --- ▼▼▼ 追加: 耳年齢のマッピング ▼▼▼ ---
+        const ageMapping = [
+            { freq: 17000, text: "10代～20代前半" }, // 24歳以下
+            { freq: 16000, text: "20代" },           // 30歳以下
+            { freq: 15000, text: "30代" },           // 39歳以下
+            { freq: 14000, text: "40代" },           // 49歳以下
+            { freq: 12000, text: "50代" },           // 50歳以下
+            { freq: 10000, text: "60代" },           // 60歳以下
+            { freq: 8000,  text: "全ての年代" }
+        ];
+
+        let isPlaying = false;
+        let maxReachedLevel = 1;
+
+        class AudioEngine {
+            constructor() { this.audioContext = null; this.mainGainNode = null; this.oscillator = null; this.isInitialized = false; }
+            async init() {
+                if (this.isInitialized) return;
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    if (this.audioContext.state === 'suspended') { await this.audioContext.resume(); }
+                    this.mainGainNode = this.audioContext.createGain();
+                    this.mainGainNode.connect(this.audioContext.destination);
+                    this.mainGainNode.gain.value = 0;
+                    this.oscillator = this.audioContext.createOscillator();
+                    this.oscillator.type = 'sine';
+                    this.oscillator.connect(this.mainGainNode);
+                    this.oscillator.start();
+                    this.isInitialized = true;
+                } catch (e) { alert('オーディオ機能の初期化に失敗しました。'); }
+            }
+            async playBeep(frequency, duration, volume) {
+                if (!this.isInitialized) return;
+                const now = this.audioContext.currentTime;
+                this.oscillator.frequency.setValueAtTime(frequency, now);
+                this.mainGainNode.gain.cancelScheduledValues(now);
+                this.mainGainNode.gain.setValueAtTime(0, now);
+                this.mainGainNode.gain.setTargetAtTime(volume, now, 0.015);
+                this.mainGainNode.gain.setTargetAtTime(0, now + duration - 0.02, 0.015);
+                return new Promise(resolve => setTimeout(resolve, duration * 1000));
+            }
+        }
+        const audioEngine = new AudioEngine();
+
+        const compliments = {
+            easy: ["いいね！", "その調子！", "すごい！", "カンタン？"],
+            medium: ["すごい集中力！", "才能あるかも？", "よく聞いてるね！", "ノッてきた！"],
+            hard: ["天才的！", "神の耳だ！", "信じられない！", "パーフェクト！"]
+        };
+
+        function getCompliment(level) {
+            let list;
+            if (level <= 5) list = compliments.easy;
+            else if (level <= 10) list = compliments.medium;
+            else list = compliments.hard;
+            return list[Math.floor(Math.random() * list.length)];
+        }
+        
+        // --- ▼▼▼ 追加: 耳年齢判定ロジック ▼▼▼ ---
+        function getEarAgeText(level) {
+            const frequency = START_FREQUENCY + (level - 1) * FREQUENCY_STEP;
+            for (const mapping of ageMapping) {
+                if (frequency >= mapping.freq) {
+                    return mapping.text;
+                }
+            }
+            return "測定不能";
+        }
+
+        function initGame() {
+            maxReachedLevel = 1;
+            gameArea.innerHTML = '';
+            gameArea.classList.remove('hidden');
+            resultScreen.classList.add('hidden');
+            endingScreen.classList.add('hidden');
+            createQuestionCard(START_FREQUENCY, 1);
+        }
+
+        function createQuestionCard(frequency, level) {
+            maxReachedLevel = Math.max(maxReachedLevel, level);
+
+            const correctAnswer = Math.floor(Math.random() * MAX_BEEPS) + 1;
+            const cardId = `card-${frequency}-${Date.now()}`;
+            const card = document.createElement('div');
+            card.className = 'question-card';
+            card.id = cardId;
+            
+            const levelIcons = ['🎵', '🎵', '🎵', '✨', '✨', '✨', '🚀', '🚀', '🚀', '👑', '👑', '👑', '🏆', '🏆', '🏆'];
+            const icon = levelIcons[level - 1] || '💀';
+            const hue = 200 - ( (frequency - START_FREQUENCY) / (MAX_FREQUENCY - START_FREQUENCY) ) * 200;
+            const borderColor = `hsl(${hue}, 80%, 60%)`;
+            card.style.borderColor = borderColor;
+            card.style.setProperty('--card-glow-color', borderColor);
+
+            card.innerHTML = `
+                <div class="level-display">LEVEL ${level} ${icon}</div>
+                <div class="frequency-display">${frequency} Hz</div>
+                <div class="controls">
+                    <button class="play-sound-button">音を再生する</button>
+                    <div class="answer-buttons">
+                        ${[1, 2, 3, 4, 5].map(i => `<button class="answer-button" data-answer="${i}">${i}</button>`).join('')}
+                        <button class="answer-button unknown" data-answer="unknown">わからない</button>
+                    </div>
+                </div>
+                <div class="feedback"></div>
+            `;
+            
+            gameArea.appendChild(card);
+            
+            const playBtn = card.querySelector('.play-sound-button');
+            const answerBtns = card.querySelectorAll('.answer-button');
+            const feedbackEl = card.querySelector('.feedback');
+            
+            playBtn.addEventListener('click', async () => {
+                if (isPlaying) return;
+                await audioEngine.init();
+                isPlaying = true;
+                playBtn.disabled = true;
+                for (let i = 0; i < correctAnswer; i++) {
+                    await audioEngine.playBeep(frequency, 0.1, 0.8);
+                    await new Promise(r => setTimeout(r, 150));
+                }
+                isPlaying = false;
+                if (!card.classList.contains('answered')) {
+                     playBtn.disabled = false;
+                }
+            });
+
+            answerBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (isPlaying) return;
+                    
+                    answerBtns.forEach(b => b.disabled = true);
+                    playBtn.disabled = true;
+                    card.classList.add('answered');
+
+                    const userAnswer = btn.dataset.answer;
+                    const isCorrect = userAnswer !== 'unknown' && parseInt(userAnswer) === correctAnswer;
+                    
+                    if (isCorrect) {
+                        feedbackEl.innerHTML = `<div class="feedback-main">正解！</div><div class="feedback-sub">${getCompliment(level)}</div>`;
+                        feedbackEl.classList.add('correct');
+                        card.classList.add('correct-animation');
+                        
+                        const nextFrequency = frequency + FREQUENCY_STEP;
+                        if (nextFrequency > MAX_FREQUENCY) {
+                            setTimeout(showEndingScreen, 1200);
+                        } else {
+                            setTimeout(() => createQuestionCard(nextFrequency, level + 1), 1200);
+                        }
+                    } else {
+                        feedbackEl.classList.add('incorrect');
+                        let feedbackHTML = (userAnswer === 'unknown')
+                            ? `<div class="feedback-main">正解は ${correctAnswer} 回でした</div>`
+                            : `<div class="feedback-main">ざんねん…</div>`;
+                        feedbackHTML += `<div class="feedback-sub" style="margin-top: 0.5rem;">どうしますか？</div>`;
+                        feedbackEl.innerHTML = feedbackHTML;
+
+                        const choiceContainer = document.createElement('div');
+                        choiceContainer.style.cssText = "display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.8rem; margin-top: 1rem; width: 100%; max-width: 400px;";
+
+                        const createChoiceButton = (text, bgColor, onClick) => {
+                            const button = document.createElement('button');
+                            button.className = 'play-sound-button';
+                            button.textContent = text;
+                            button.style.fontSize = '1rem';
+                            button.style.padding = '0.7rem 0.5rem';
+                            if (bgColor) button.style.backgroundColor = bgColor;
+                            button.onclick = onClick;
+                            return button;
+                        };
+                        
+                        if (level > 1) {
+                            const backButton = createChoiceButton(`Lv.${level - 1} に戻る`, 'var(--text-color)', () => createQuestionCard(frequency - FREQUENCY_STEP, level - 1));
+                            backButton.style.color = 'var(--primary-bg)';
+                            choiceContainer.appendChild(backButton);
+                        }
+
+                        const retryButton = createChoiceButton(`もう一度 Lv.${level}`, null, () => createQuestionCard(frequency, level));
+                        choiceContainer.appendChild(retryButton);
+
+                        const resetButton = createChoiceButton('はじめから', '#8892b0', () => {
+                            if (confirm('本当にはじめからやり直しますか？')) initGame();
+                        });
+                        choiceContainer.appendChild(resetButton);
+
+                        const giveUpButton = createChoiceButton('終了する', '#e57373', () => {
+                            if (confirm('チャレンジを終了して結果を見ますか？')) showResultScreen();
+                        });
+                        choiceContainer.appendChild(giveUpButton);
+                        
+                        feedbackEl.appendChild(choiceContainer);
+                    }
+                });
+            });
+
+            setTimeout(() => {
+                card.classList.add('visible');
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+        }
+
+        // --- ▼▼▼ 変更: 結果表示画面の更新 ▼▼▼ ---
+        function showResultScreen() {
+            gameArea.classList.add('hidden');
+            const earAge = getEarAgeText(maxReachedLevel);
+
+            resultScreen.innerHTML = `
+                <div class="question-card visible" style="border-color: var(--accent-color);">
+                    <h1>チャレンジ結果</h1>
+                    <p style="font-size: 1.2rem;">あなたの最高到達レベルは...</p>
+                    <p style="font-size: 3rem; font-family: 'Orbitron'; color: var(--accent-color); text-shadow: 0 0 10px var(--accent-color); margin: 1rem 0;">LEVEL ${maxReachedLevel}</p>
+                    
+                    <p style="font-size: 1.2rem; margin-top: 2rem;">あなたの耳年齢は...</p>
+                    <p style="font-size: 2rem; font-weight: 700; color: var(--correct-color);">${earAge} 相当です！</p>
+                    
+                    <button class="play-sound-button" id="restart-button-result" style="margin-top: 2rem;">もう一度挑戦する</button>
+                </div>
+            `;
+            resultScreen.classList.remove('hidden');
+            resultScreen.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            document.getElementById('restart-button-result').addEventListener('click', initGame);
+        }
+
+        // --- ▼▼▼ 変更: 全クリア画面の更新 ▼▼▼ ---
+        function showEndingScreen() {
+            gameArea.classList.add('hidden');
+            const finalLevel = Math.floor((MAX_FREQUENCY - START_FREQUENCY) / FREQUENCY_STEP) + 1;
+            const earAge = getEarAgeText(finalLevel);
+
+            endingScreen.innerHTML = `
+                 <div class="question-card visible" style="border-color: gold;">
+                     <h1>CONGRATULATIONS!</h1>
+                    <p style="font-size: 1.2rem;">すべてのチャレンジをクリアしました！</p>
+                    
+                    <p style="font-size: 1.2rem; margin-top: 2rem;">あなたの耳年齢は...</p>
+                    <p style="font-size: 2rem; font-weight: 700; color: var(--correct-color);">${earAge} 相当です！</p>
+                    <p style="font-size: 0.9rem; opacity: 0.8;">まさに神の耳です！</p>
+
+                    <button class="play-sound-button" id="restart-button-end" style="margin-top: 2rem;">もう一度挑戦する</button>
+                </div>
+            `;
+            endingScreen.classList.remove('hidden');
+            endingScreen.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            document.getElementById('restart-button-end').addEventListener('click', initGame);
+        }
+        
+        initGame();
+    </script>
+</body>
+</html>
