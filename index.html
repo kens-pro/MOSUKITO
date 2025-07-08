@@ -23,7 +23,7 @@
             font-family: 'M PLUS 1p', sans-serif;
             background-color: var(--primary-bg);
             color: var(--text-color);
-            padding: 2rem 1rem;
+            padding: 1rem; /* 少し余白を調整 */
         }
         .main-container {
             max-width: 600px;
@@ -158,11 +158,8 @@
         <header class="header">
             <h1>モスキートゲームで耳年齢チェック！</h1>
         </header>
-
         <main id="game-area"></main>
-
         <div id="result-screen" class="result-screen hidden"></div>
-
         <div id="ending-screen" class="ending-screen hidden"></div>
     </div>
 
@@ -176,27 +173,32 @@
         const FREQUENCY_STEP = 1000;
         const MAX_BEEPS = 5;
 
-        // --- ▼▼▼ 追加: 耳年齢のマッピング ▼▼▼ ---
         const ageMapping = [
-            { freq: 17000, text: "10代～20代前半" }, // 24歳以下
-            { freq: 16000, text: "20代" },           // 30歳以下
-            { freq: 15000, text: "30代" },           // 39歳以下
-            { freq: 14000, text: "40代" },           // 49歳以下
-            { freq: 12000, text: "50代" },           // 50歳以下
-            { freq: 10000, text: "60代" },           // 60歳以下
+            { freq: 17000, text: "10代～20代前半" },
+            { freq: 16000, text: "20代" },
+            { freq: 15000, text: "30代" },
+            { freq: 14000, text: "40代" },
+            { freq: 12000, text: "50代" },
+            { freq: 10000, text: "60代" },
             { freq: 8000,  text: "全ての年代" }
         ];
 
         let isPlaying = false;
         let maxReachedLevel = 1;
+        let audioEngine; // ★★★ 修正点：グローバルスコープに移動
 
         class AudioEngine {
             constructor() { this.audioContext = null; this.mainGainNode = null; this.oscillator = null; this.isInitialized = false; }
             async init() {
                 if (this.isInitialized) return;
                 try {
+                    // ★★★ 修正点：AudioContextが既存なら閉じてから新規作成
+                    if (this.audioContext && this.audioContext.state !== 'closed') {
+                        await this.audioContext.close();
+                    }
                     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
                     if (this.audioContext.state === 'suspended') { await this.audioContext.resume(); }
+                    
                     this.mainGainNode = this.audioContext.createGain();
                     this.mainGainNode.connect(this.audioContext.destination);
                     this.mainGainNode.gain.value = 0;
@@ -218,7 +220,6 @@
                 return new Promise(resolve => setTimeout(resolve, duration * 1000));
             }
         }
-        const audioEngine = new AudioEngine();
 
         const compliments = {
             easy: ["いいね！", "その調子！", "すごい！", "カンタン？"],
@@ -234,13 +235,10 @@
             return list[Math.floor(Math.random() * list.length)];
         }
         
-        // --- ▼▼▼ 追加: 耳年齢判定ロジック ▼▼▼ ---
         function getEarAgeText(level) {
             const frequency = START_FREQUENCY + (level - 1) * FREQUENCY_STEP;
             for (const mapping of ageMapping) {
-                if (frequency >= mapping.freq) {
-                    return mapping.text;
-                }
+                if (frequency >= mapping.freq) return mapping.text;
             }
             return "測定不能";
         }
@@ -251,6 +249,10 @@
             gameArea.classList.remove('hidden');
             resultScreen.classList.add('hidden');
             endingScreen.classList.add('hidden');
+            
+            // ★★★ 修正点：ゲーム開始時に必ず新しい音声エンジンを生成 ★★★
+            audioEngine = new AudioEngine(); 
+            
             createQuestionCard(START_FREQUENCY, 1);
         }
 
@@ -258,13 +260,18 @@
             maxReachedLevel = Math.max(maxReachedLevel, level);
 
             const correctAnswer = Math.floor(Math.random() * MAX_BEEPS) + 1;
-            const cardId = `card-${frequency}-${Date.now()}`;
+            const cardId = `card-${frequency}`;
+            
+            // 既存のカードがあれば削除
+            const existingCard = document.getElementById(cardId);
+            if(existingCard) existingCard.remove();
+            
             const card = document.createElement('div');
             card.className = 'question-card';
             card.id = cardId;
             
-            const levelIcons = ['🎵', '🎵', '🎵', '✨', '✨', '✨', '🚀', '🚀', '🚀', '👑', '👑', '👑', '🏆', '🏆', '🏆'];
-            const icon = levelIcons[level - 1] || '💀';
+            const levelIcons = ['🎵', '✨', '🚀', '👑', '🏆'];
+            const icon = levelIcons[Math.floor((level - 1) / 3)] || '💀';
             const hue = 200 - ( (frequency - START_FREQUENCY) / (MAX_FREQUENCY - START_FREQUENCY) ) * 200;
             const borderColor = `hsl(${hue}, 80%, 60%)`;
             card.style.borderColor = borderColor;
@@ -291,7 +298,9 @@
             
             playBtn.addEventListener('click', async () => {
                 if (isPlaying) return;
+                // ★★★ 修正点：再生前に必ずinitの完了を待つ ★★★
                 await audioEngine.init();
+                
                 isPlaying = true;
                 playBtn.disabled = true;
                 for (let i = 0; i < correctAnswer; i++) {
@@ -335,7 +344,7 @@
                         feedbackEl.innerHTML = feedbackHTML;
 
                         const choiceContainer = document.createElement('div');
-                        choiceContainer.style.cssText = "display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.8rem; margin-top: 1rem; width: 100%; max-width: 400px;";
+                        choiceContainer.style.cssText = "display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.8rem; margin-top: 1rem; width: 100%; max-width: 400px; margin-left: auto; margin-right: auto;";
 
                         const createChoiceButton = (text, bgColor, onClick) => {
                             const button = document.createElement('button');
@@ -378,50 +387,38 @@
             }, 100);
         }
 
-        // --- ▼▼▼ 変更: 結果表示画面の更新 ▼▼▼ ---
         function showResultScreen() {
             gameArea.classList.add('hidden');
             const earAge = getEarAgeText(maxReachedLevel);
-
             resultScreen.innerHTML = `
                 <div class="question-card visible" style="border-color: var(--accent-color);">
                     <h1>チャレンジ結果</h1>
                     <p style="font-size: 1.2rem;">あなたの最高到達レベルは...</p>
                     <p style="font-size: 3rem; font-family: 'Orbitron'; color: var(--accent-color); text-shadow: 0 0 10px var(--accent-color); margin: 1rem 0;">LEVEL ${maxReachedLevel}</p>
-                    
                     <p style="font-size: 1.2rem; margin-top: 2rem;">あなたの耳年齢は...</p>
                     <p style="font-size: 2rem; font-weight: 700; color: var(--correct-color);">${earAge} 相当です！</p>
-                    
                     <button class="play-sound-button" id="restart-button-result" style="margin-top: 2rem;">もう一度挑戦する</button>
-                </div>
-            `;
+                </div>`;
             resultScreen.classList.remove('hidden');
             resultScreen.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
             document.getElementById('restart-button-result').addEventListener('click', initGame);
         }
 
-        // --- ▼▼▼ 変更: 全クリア画面の更新 ▼▼▼ ---
         function showEndingScreen() {
             gameArea.classList.add('hidden');
             const finalLevel = Math.floor((MAX_FREQUENCY - START_FREQUENCY) / FREQUENCY_STEP) + 1;
             const earAge = getEarAgeText(finalLevel);
-
             endingScreen.innerHTML = `
                  <div class="question-card visible" style="border-color: gold;">
                      <h1>CONGRATULATIONS!</h1>
                     <p style="font-size: 1.2rem;">すべてのチャレンジをクリアしました！</p>
-                    
                     <p style="font-size: 1.2rem; margin-top: 2rem;">あなたの耳年齢は...</p>
                     <p style="font-size: 2rem; font-weight: 700; color: var(--correct-color);">${earAge} 相当です！</p>
                     <p style="font-size: 0.9rem; opacity: 0.8;">まさに神の耳です！</p>
-
                     <button class="play-sound-button" id="restart-button-end" style="margin-top: 2rem;">もう一度挑戦する</button>
-                </div>
-            `;
+                </div>`;
             endingScreen.classList.remove('hidden');
             endingScreen.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
             document.getElementById('restart-button-end').addEventListener('click', initGame);
         }
         
